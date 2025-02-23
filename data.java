@@ -10,6 +10,7 @@ import javafx.stage.Stage;
 import java.util.*;
 import java.util.stream.Collectors;
 
+
 class Vertex {
     double x, y;
     List<Edge> edges;
@@ -195,8 +196,10 @@ public class data extends Application {
     private static final double MIN_SCALE = 0.1;
     private static final double MAX_SCALE = 5.0;
 
-    private List<Vertex> shortestPath = new ArrayList<>();
+    private double translateX = 0, translateY = 0;  // 用于平移地图的位置
+    private double mousePressedX, mousePressedY;
 
+    private List<Vertex> shortestPath = new ArrayList<>();
 
     @Override
     public void start(Stage primaryStage) {
@@ -219,30 +222,46 @@ public class data extends Application {
         // 绘制地图
         drawMap(gc, graph);
 
-        //最短路径
+        // 最短路径
         Vertex source = graph.getVertices().get(0);
         Vertex destination = graph.getVertices().get(1);
-        displayShortestPath(gc,graph,source,destination);
-
+        displayShortestPath(gc, graph, source, destination);
 
         // 更新车流模拟
         simulateTraffic(gc, graph);
 
+        // 鼠标拖动事件
+        canvas.setOnMousePressed(event -> {
+            mousePressedX = event.getSceneX();
+            mousePressedY = event.getSceneY();
+        });
+
+        canvas.setOnMouseDragged(event -> {
+            double deltaX = event.getSceneX() - mousePressedX;
+            double deltaY = event.getSceneY() - mousePressedY;
+
+            translateX += deltaX;
+            translateY += deltaY;
+
+            // 更新鼠标位置
+            mousePressedX = event.getSceneX();
+            mousePressedY = event.getSceneY();
+
+            // 重绘地图
+            gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+            drawMap(gc, graph);
+            displayShortestPath(gc, graph, source, destination);
+        });
+
         // 缩放监听事件
         canvas.setOnScroll((ScrollEvent event) -> {
-
             scaleFactor += (event.getDeltaY() > 0) ? SCALE_SPEED : -SCALE_SPEED;
             scaleFactor = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scaleFactor));
-
-            // 计算新的平移位置
-            double scaleFactorDifference = event.getDeltaY() > 0 ? SCALE_SPEED : -SCALE_SPEED;
-
-            //graph.scaleMap(scaleFactor);
 
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
             drawMap(gc, graph);
-            displayShortestPath(gc,graph,source,destination);
+            displayShortestPath(gc, graph, source, destination);
         });
 
         // 创建并显示场景
@@ -256,13 +275,20 @@ public class data extends Application {
         graph.getEdges().forEach(edge -> {
             Color edgeColor = getEdgeColor(edge);
             gc.setStroke(edgeColor);
-            gc.strokeLine(edge.start.x * scaleFactor, edge.start.y * scaleFactor,
-                    edge.end.x * scaleFactor, edge.end.y * scaleFactor);
+
+            gc.strokeLine(
+                    (edge.start.x + translateX) * scaleFactor, (edge.start.y + translateY) * scaleFactor,
+                    (edge.end.x + translateX) * scaleFactor, (edge.end.y + translateY) * scaleFactor
+            );
         });
 
         graph.getVertices().forEach(vertex -> {
             gc.setFill(Color.RED);
-            gc.fillOval(vertex.x * scaleFactor - 5, vertex.y * scaleFactor - 5, 10, 10);
+            gc.fillOval(
+                    (vertex.x + translateX) * scaleFactor - 5,
+                    (vertex.y + translateY) * scaleFactor - 5,
+                    10, 10
+            );
         });
     }
 
@@ -280,7 +306,6 @@ public class data extends Application {
     private void simulateTraffic(GraphicsContext gc, Graph graph) {
         Random rand = new Random();
 
-
         // 模拟车流
         new Thread(() -> {
             while (true) {
@@ -294,33 +319,39 @@ public class data extends Application {
 
                 // 随机增加或减少一些车辆
                 graph.getEdges().forEach(edge -> {
-                    edge.updateTraffic(rand.nextInt(10)*judge); // 每次更新随机增加1-5辆车
-                    System.out.println(judge);
+                    edge.updateTraffic(rand.nextInt(10) * judge*10);
+
                 });
+                System.out.println(judge);
 
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
                 drawMap(gc, graph);
             }
         }).start();
-
-
     }
 
     // 计算并显示最短路径
+    static int outputtimes = 1;
     private void displayShortestPath(GraphicsContext gc, Graph graph, Vertex source, Vertex destination) {
+
         List<Vertex> path = graph.calculateShortestPath(source, destination);
 
         gc.setStroke(Color.BLUE);
         for (int i = 0; i < path.size() - 1; i++) {
             Vertex start = path.get(i);
             Vertex end = path.get(i + 1);
-            gc.strokeLine(start.x * scaleFactor, start.y * scaleFactor,
-                    end.x * scaleFactor, end.y * scaleFactor);
-            System.out.println("start point: (" + start.x * scaleFactor+","+start.y * scaleFactor+")"+
-                    "end point: (" + end.x * scaleFactor+","+end.y * scaleFactor+")");
+            gc.strokeLine(
+                    (start.x + translateX) * scaleFactor, (start.y + translateY) * scaleFactor,
+                    (end.x + translateX) * scaleFactor, (end.y + translateY) * scaleFactor);
+            if(outputtimes>=1){
+                System.out.println("start point: (" + start.x * scaleFactor+","+start.y * scaleFactor+")"+
+                        "end point: (" + end.x * scaleFactor+","+end.y * scaleFactor+")");}
+            }
+          outputtimes=0;
         }
-    }
+
+
 
     public static void main(String[] args) {
         launch(args);
