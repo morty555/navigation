@@ -1,13 +1,17 @@
 import javafx.application.Application;
-import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ToolBar;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 
@@ -199,10 +203,13 @@ public class data extends Application {
     private double translateX = 0, translateY = 0;  // 用于平移地图的位置
     private double mousePressedX, mousePressedY;
 
+    AtomicInteger judgeshortest = new AtomicInteger(1);
+
     private List<Vertex> shortestPath = new ArrayList<>();
 
     @Override
     public void start(Stage primaryStage) {
+
         int N = 1000;
         double maxCoordinateValue = 800;
         double maxEdgeLength = 100;
@@ -212,23 +219,23 @@ public class data extends Application {
         graph.generateConnectedGraph(maxEdgeLength);
 
         // 创建 Canvas 绘制图形
-        Group root = new Group();
+       // Group root = new Group();
         Canvas canvas = new Canvas(maxCoordinateValue, maxCoordinateValue);
-        root.getChildren().add(canvas);
+       // root.getChildren().add(canvas);
 
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.setLineWidth(2);
-
-        // 绘制地图
-        drawMap(gc, graph);
 
         // 最短路径
         Vertex source = graph.getVertices().get(0);
         Vertex destination = graph.getVertices().get(1);
         displayShortestPath(gc, graph, source, destination);
 
+        // 绘制地图
+        drawMap(gc, graph,source,destination, judgeshortest);
+
         // 更新车流模拟
-        simulateTraffic(gc, graph);
+        simulateTraffic(gc, graph,source,destination, judgeshortest);
 
         // 鼠标拖动事件
         canvas.setOnMousePressed(event -> {
@@ -249,8 +256,8 @@ public class data extends Application {
 
             // 重绘地图
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawMap(gc, graph);
-            displayShortestPath(gc, graph, source, destination);
+            drawMap(gc, graph,source,destination, judgeshortest);
+            //displayShortestPath(gc, graph, source, destination);
         });
 
         // 缩放监听事件
@@ -260,18 +267,62 @@ public class data extends Application {
 
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-            drawMap(gc, graph);
-            displayShortestPath(gc, graph, source, destination);
+            drawMap(gc, graph,source,destination, judgeshortest);
+            //displayShortestPath(gc, graph, source, destination);
         });
+
+        //工具栏
+        ToolBar toolBar = new ToolBar();
+        Button zoomInButton = new Button("放大");
+        Button zoomOutButton = new Button("缩小");
+        Button resetViewButton = new Button("重置视图");
+        ComboBox<String> pathOptions = new ComboBox<>();
+        pathOptions.getItems().addAll("显示最短路径", "隐藏最短路径");
+        pathOptions.setValue("显示最短路径");
+        toolBar.getItems().addAll(zoomInButton, zoomOutButton, resetViewButton, pathOptions);
+        // 添加事件处理
+        zoomInButton.setOnAction(e -> {
+            scaleFactor = Math.min(MAX_SCALE, scaleFactor + SCALE_SPEED);
+            redraw(gc, graph,source,destination, judgeshortest);
+        });
+        zoomOutButton.setOnAction(e -> {
+            scaleFactor = Math.max(MIN_SCALE, scaleFactor - SCALE_SPEED);
+            redraw(gc, graph,source,destination, judgeshortest);
+        });
+        resetViewButton.setOnAction(e -> {
+            scaleFactor = 1.0;
+            translateX = 0;
+            translateY = 0;
+            redraw(gc, graph,source,destination, judgeshortest);
+        });
+        pathOptions.setOnAction(e -> {
+            if (pathOptions.getValue().equals("显示最短路径")) {
+                displayShortestPath(gc, graph, graph.getVertices().get(0), graph.getVertices().get(1));
+                System.out.println(pathOptions.getValue());
+            } else {
+                judgeshortest.set(0);
+                System.out.println(pathOptions.getValue());
+                redraw(gc, graph,source,destination, judgeshortest); // 只重绘地图，不显示路径
+            }
+        });
+        VBox root = new VBox(toolBar, canvas);
 
         // 创建并显示场景
         Scene scene = new Scene(root, maxCoordinateValue, maxCoordinateValue);
         primaryStage.setTitle("Graph Visualization");
         primaryStage.setScene(scene);
         primaryStage.show();
+
+    }
+    private void redraw(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest) {
+        gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
+        drawMap(gc, graph,source,destination,judgeshortest);
+
     }
 
-    private void drawMap(GraphicsContext gc, Graph graph) {
+
+    private void drawMap(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,AtomicInteger judgeshortest) {
+
         graph.getEdges().forEach(edge -> {
             Color edgeColor = getEdgeColor(edge);
             gc.setStroke(edgeColor);
@@ -290,6 +341,10 @@ public class data extends Application {
                     10, 10
             );
         });
+        if(judgeshortest.get() == 1){
+        displayShortestPath(gc, graph, source, destination);
+        System.out.println(judgeshortest.get());
+        }
     }
 
     private Color getEdgeColor(Edge edge) {
@@ -303,7 +358,7 @@ public class data extends Application {
         }
     }
 
-    private void simulateTraffic(GraphicsContext gc, Graph graph) {
+    private void simulateTraffic(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest) {
         Random rand = new Random();
 
         // 模拟车流
@@ -326,10 +381,11 @@ public class data extends Application {
 
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
-                drawMap(gc, graph);
+                drawMap(gc, graph,source,destination,judgeshortest);
             }
         }).start();
     }
+
 
     // 计算并显示最短路径
     static int outputtimes = 1;
@@ -347,9 +403,9 @@ public class data extends Application {
             if(outputtimes>=1){
                 System.out.println("start point: (" + start.x * scaleFactor+","+start.y * scaleFactor+")"+
                         "end point: (" + end.x * scaleFactor+","+end.y * scaleFactor+")");}
-            }
-          outputtimes=0;
         }
+        outputtimes=0;
+    }
 
 
 
