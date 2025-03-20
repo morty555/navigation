@@ -2,9 +2,7 @@ import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.ToolBar;
+import javafx.scene.control.*;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -12,6 +10,7 @@ import javafx.stage.Stage;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 
@@ -71,6 +70,22 @@ class Graph {
             vertices.add(new Vertex(x, y));
         }
     }
+
+    public List<Vertex> findNearestVertices(double x, double y, int count) {
+        return vertices.stream()
+                .sorted(Comparator.comparingDouble(v -> Math.sqrt(Math.pow(v.x - x, 2) + Math.pow(v.y - y, 2))))
+                .limit(count)
+                .collect(Collectors.toList());
+    }
+
+    public List<Edge> getRelatedEdges(List<Vertex> selectedVertices) {
+        Set<Vertex> vertexSet = new HashSet<>(selectedVertices);
+        return selectedVertices.stream()
+                .flatMap(v -> v.edges.stream())
+                .filter(e -> vertexSet.contains(e.start) && vertexSet.contains(e.end))
+                .collect(Collectors.toList());
+    }
+
 
     public void generateConnectedGraph(double maxEdgeLength) {
         List<Edge> allEdges = new ArrayList<>();
@@ -218,24 +233,109 @@ public class data extends Application {
         graph.generateRandomVertices(N, maxCoordinateValue);
         graph.generateConnectedGraph(maxEdgeLength);
 
+        if (graph.getVertices().isEmpty()) {
+            System.err.println("Error: Graph has no vertices.");
+            return;
+        }
+        if (graph.getVertices().size() < 2) {
+            System.err.println("Error: Not enough vertices in the graph.");
+            return;
+        }
+
+
         // 创建 Canvas 绘制图形
        // Group root = new Group();
         Canvas canvas = new Canvas(maxCoordinateValue, maxCoordinateValue);
        // root.getChildren().add(canvas);
 
         GraphicsContext gc = canvas.getGraphicsContext2D();
-        gc.setLineWidth(2);
 
+        gc.setLineWidth(2);
+       
+        //如果 graph.getVertices() 为空或 size() < 2，这会导致 IndexOutOfBoundsException，但也可能在某些情况下变成 NullPointerException。
+        if (graph.getVertices().size() < 2) {
+            System.err.println("Error: Not enough vertices in the graph.");
+            return;
+        }
         // 最短路径
         Vertex source = graph.getVertices().get(0);
         Vertex destination = graph.getVertices().get(1);
+        //工具栏
+
+        //find 100 nearest vertex
+        ToolBar toolBar = new ToolBar();
+        TextField xInput = new TextField();
+        TextField yInput = new TextField();
+        Button searchButton = new Button("查找最近100个顶点");
+        toolBar.getItems().addAll(new Label("X:"), xInput, new Label("Y:"), yInput, searchButton);
+        //处理逻辑
+        AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
+        AtomicReference<List<Edge>> relatedEdges =new AtomicReference<>(new ArrayList<>());
+        // TODO: 2025/3/20 输入点数据时才会调用drawmap展示最近100个顶点高亮，在进行其他操作如放大缩小等再次调用drawmap函数时才会展示高亮，因此高亮只会存在一瞬间，进行其他操作之后才会继续产生高亮
+        // TODO: 2025/3/20 点的具体x y值不好找，需要给Vertex类生成id属性，然后展示最近100个顶点高亮的函数使用id进行访问
+        searchButton.setOnAction(e -> {
+            try {
+                double x = Double.parseDouble(xInput.getText());
+                double y = Double.parseDouble(yInput.getText());
+
+                // 查找最近100个顶点
+                nearestVertices.set(graph.findNearestVertices(x, y, 100));
+                 relatedEdges.set(graph.getRelatedEdges(nearestVertices.get()));
+
+                // 重新绘制地图
+                gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+                drawMap(gc, graph, source, destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+            } catch (NumberFormatException ex) {
+                System.out.println("请输入有效的数字");
+            }
+        });
+
+
+
+        //放大缩小
+        Button zoomInButton = new Button("放大");
+        Button zoomOutButton = new Button("缩小");
+        Button resetViewButton = new Button("重置视图");
+        ComboBox<String> pathOptions = new ComboBox<>();
+
+        //展示最短路径
+        pathOptions.getItems().addAll("显示最短路径", "隐藏最短路径");
+        pathOptions.setValue("显示最短路径");
+        toolBar.getItems().addAll(zoomInButton, zoomOutButton, resetViewButton, pathOptions);
+        // 添加事件处理
+        zoomInButton.setOnAction(e -> {
+            scaleFactor = Math.min(MAX_SCALE, scaleFactor + SCALE_SPEED);
+            redraw(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+        });
+        zoomOutButton.setOnAction(e -> {
+            scaleFactor = Math.max(MIN_SCALE, scaleFactor - SCALE_SPEED);
+            redraw(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+        });
+        resetViewButton.setOnAction(e -> {
+            scaleFactor = 1.0;
+            translateX = 0;
+            translateY = 0;
+            redraw(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+        });
+        pathOptions.setOnAction(e -> {
+            if (pathOptions.getValue().equals("显示最短路径")) {
+                judgeshortest.set(1);
+                System.out.println(pathOptions.getValue());
+                redraw(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+
+            } else {
+                judgeshortest.set(0);
+                System.out.println(pathOptions.getValue());
+                redraw(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get()); // 只重绘地图，不显示路径
+            }
+        });
         displayShortestPath(gc, graph, source, destination);
 
         // 绘制地图
-        drawMap(gc, graph,source,destination, judgeshortest);
+        drawMap(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
 
         // 更新车流模拟
-        simulateTraffic(gc, graph,source,destination, judgeshortest);
+        simulateTraffic(gc, graph,source,destination, judgeshortest,nearestVertices.get(), relatedEdges.get());
 
         // 鼠标拖动事件
         canvas.setOnMousePressed(event -> {
@@ -256,7 +356,7 @@ public class data extends Application {
 
             // 重绘地图
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawMap(gc, graph,source,destination, judgeshortest);
+            drawMap(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
             //displayShortestPath(gc, graph, source, destination);
         });
 
@@ -267,44 +367,11 @@ public class data extends Application {
 
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-            drawMap(gc, graph,source,destination, judgeshortest);
+            drawMap(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
             //displayShortestPath(gc, graph, source, destination);
         });
 
-        //工具栏
-        ToolBar toolBar = new ToolBar();
-        Button zoomInButton = new Button("放大");
-        Button zoomOutButton = new Button("缩小");
-        Button resetViewButton = new Button("重置视图");
-        ComboBox<String> pathOptions = new ComboBox<>();
-        pathOptions.getItems().addAll("显示最短路径", "隐藏最短路径");
-        pathOptions.setValue("显示最短路径");
-        toolBar.getItems().addAll(zoomInButton, zoomOutButton, resetViewButton, pathOptions);
-        // 添加事件处理
-        zoomInButton.setOnAction(e -> {
-            scaleFactor = Math.min(MAX_SCALE, scaleFactor + SCALE_SPEED);
-            redraw(gc, graph,source,destination, judgeshortest);
-        });
-        zoomOutButton.setOnAction(e -> {
-            scaleFactor = Math.max(MIN_SCALE, scaleFactor - SCALE_SPEED);
-            redraw(gc, graph,source,destination, judgeshortest);
-        });
-        resetViewButton.setOnAction(e -> {
-            scaleFactor = 1.0;
-            translateX = 0;
-            translateY = 0;
-            redraw(gc, graph,source,destination, judgeshortest);
-        });
-        pathOptions.setOnAction(e -> {
-            if (pathOptions.getValue().equals("显示最短路径")) {
-                displayShortestPath(gc, graph, graph.getVertices().get(0), graph.getVertices().get(1));
-                System.out.println(pathOptions.getValue());
-            } else {
-                judgeshortest.set(0);
-                System.out.println(pathOptions.getValue());
-                redraw(gc, graph,source,destination, judgeshortest); // 只重绘地图，不显示路径
-            }
-        });
+
         VBox root = new VBox(toolBar, canvas);
 
         // 创建并显示场景
@@ -314,15 +381,16 @@ public class data extends Application {
         primaryStage.show();
 
     }
-    private void redraw(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest) {
+    private void redraw(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
         gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
-        drawMap(gc, graph,source,destination,judgeshortest);
+        drawMap(gc, graph,source,destination,judgeshortest, highlightVertices, highlightEdges);
 
     }
 
 
-    private void drawMap(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,AtomicInteger judgeshortest) {
-
+    private void drawMap(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
+   
+        //初始化点和边
         graph.getEdges().forEach(edge -> {
             Color edgeColor = getEdgeColor(edge);
             gc.setStroke(edgeColor);
@@ -341,9 +409,28 @@ public class data extends Application {
                     10, 10
             );
         });
+        // 高亮最近的100个顶点
+        gc.setFill(Color.BLUE);
+        highlightVertices.forEach(vertex -> {
+            gc.fillOval(
+                    (vertex.x + translateX) * scaleFactor - 5,
+                    (vertex.y + translateY) * scaleFactor - 5,
+                    10, 10
+            );
+        });
+
+        // 高亮相关的边
+        gc.setStroke(Color.ORANGE);
+        highlightEdges.forEach(edge -> {
+            gc.strokeLine(
+                    (edge.start.x + translateX) * scaleFactor, (edge.start.y + translateY) * scaleFactor,
+                    (edge.end.x + translateX) * scaleFactor, (edge.end.y + translateY) * scaleFactor
+            );
+        });
+
         if(judgeshortest.get() == 1){
         displayShortestPath(gc, graph, source, destination);
-        System.out.println(judgeshortest.get());
+        //System.out.println(judgeshortest.get());
         }
     }
 
@@ -358,7 +445,7 @@ public class data extends Application {
         }
     }
 
-    private void simulateTraffic(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest) {
+    private void simulateTraffic(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
         Random rand = new Random();
 
         // 模拟车流
@@ -377,11 +464,18 @@ public class data extends Application {
                     edge.updateTraffic(rand.nextInt(10) * judge*10);
 
                 });
-                System.out.println(judge);
+
+                // TODO: 2025/3/20 车流量现在还是通过随机数judge生成，后面需要改成题目要求函数
+                    System.out.println(judge);
+
+                // TODO: 2025/3/20  展示最优路径，要结合车流量和最短路径综合考虑
+
+
+                // TODO: 2025/3/20  地图缩放功能只展示重要点的功能。method：可能需要在每个区域set一个特殊点。可能生成连通图的方式需要优化。
 
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
-                drawMap(gc, graph,source,destination,judgeshortest);
+                drawMap(gc, graph,source,destination,judgeshortest, highlightVertices, highlightEdges);
             }
         }).start();
     }
