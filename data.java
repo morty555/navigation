@@ -16,9 +16,12 @@ import java.util.stream.Collectors;
 
 class Vertex {
     double x, y;
+
+    int id;
     List<Edge> edges;
 
-    public Vertex(double x, double y) {
+    public Vertex(int i,double x, double y) {
+        this.id = i;
         this.x = x;
         this.y = y;
         this.edges = new ArrayList<>();
@@ -62,16 +65,21 @@ class Graph {
         this.vertices = new ArrayList<>();
     }
 
-    public void generateRandomVertices(int N, double maxCoordinateValue) {
+    public Map<Integer, Vertex> generateRandomVertices(int N, double maxCoordinateValue) {
+        Map<Integer, Vertex> pointsMap = new HashMap<>();
         Random rand = new Random();
         for (int i = 0; i < N; i++) {
             double x = rand.nextDouble() * maxCoordinateValue;
             double y = rand.nextDouble() * maxCoordinateValue;
-            vertices.add(new Vertex(x, y));
+            vertices.add(new Vertex(i,x, y));
+            pointsMap.put(i, new Vertex(i,x,y));
         }
+        return pointsMap;
     }
 
-    public List<Vertex> findNearestVertices(double x, double y, int count) {
+    public List<Vertex> findNearestVertices( Map<Integer, Vertex> pointsMap, int pointid,int count) {
+        double x = pointsMap.get(pointid).x;
+        double y = pointsMap.get(pointid).y;
         return vertices.stream()
                 .sorted(Comparator.comparingDouble(v -> Math.sqrt(Math.pow(v.x - x, 2) + Math.pow(v.y - y, 2))))
                 .limit(count)
@@ -230,7 +238,7 @@ public class data extends Application {
         double maxEdgeLength = 100;
 
         Graph graph = new Graph();
-        graph.generateRandomVertices(N, maxCoordinateValue);
+        Map<Integer, Vertex> vertexMap =graph.generateRandomVertices(N, maxCoordinateValue);
         graph.generateConnectedGraph(maxEdgeLength);
 
         if (graph.getVertices().isEmpty()) {
@@ -264,10 +272,12 @@ public class data extends Application {
 
         //find 100 nearest vertex
         ToolBar toolBar = new ToolBar();
-        TextField xInput = new TextField();
-        TextField yInput = new TextField();
+        //TextField xInput = new TextField();
+        //TextField yInput = new TextField();
+        TextField pointInput = new TextField();
         Button searchButton = new Button("查找最近100个顶点");
-        toolBar.getItems().addAll(new Label("X:"), xInput, new Label("Y:"), yInput, searchButton);
+        //toolBar.getItems().addAll(new Label("X:"), xInput, new Label("Y:"), yInput, searchButton);
+        toolBar.getItems().addAll(new Label("pointID:"), pointInput,  searchButton);
         //处理逻辑
         AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
         AtomicReference<List<Edge>> relatedEdges =new AtomicReference<>(new ArrayList<>());
@@ -275,11 +285,14 @@ public class data extends Application {
         // TODO: 2025/3/20 点的具体x y值不好找，需要给Vertex类生成id属性，然后展示最近100个顶点高亮的函数使用id进行访问
         searchButton.setOnAction(e -> {
             try {
-                double x = Double.parseDouble(xInput.getText());
-                double y = Double.parseDouble(yInput.getText());
+                //double x = Double.parseDouble(xInput.getText());
+                //double y = Double.parseDouble(yInput.getText());
+
+
+                int id = Integer.parseInt(pointInput.getText());
 
                 // 查找最近100个顶点
-                nearestVertices.set(graph.findNearestVertices(x, y, 100));
+                nearestVertices.set(graph.findNearestVertices(vertexMap,id ,100));
                  relatedEdges.set(graph.getRelatedEdges(nearestVertices.get()));
 
                 // 重新绘制地图
@@ -472,6 +485,8 @@ public class data extends Application {
 
 
                 // TODO: 2025/3/20  地图缩放功能只展示重要点的功能。method：可能需要在每个区域set一个特殊点。可能生成连通图的方式需要优化。
+
+                // TODO: 2025/3/21  随着缩放图片或者放大窗口，地图能随着自定义布局。 
 
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
