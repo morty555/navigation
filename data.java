@@ -69,7 +69,7 @@ class Graph {
         Map<Integer, Vertex> pointsMap = new HashMap<>();
         Random rand = new Random();
         for (int i = 0; i < N; i++) {
-            double x = rand.nextDouble() * maxCoordinateValue;
+            double x = rand.nextDouble() * maxCoordinateValue*1.5;
             double y = rand.nextDouble() * maxCoordinateValue;
             vertices.add(new Vertex(i,x, y));
             pointsMap.put(i, new Vertex(i,x,y));
@@ -236,7 +236,7 @@ public class data extends Application {
     public void start(Stage primaryStage) {
 
         int N = 1000;
-        double maxCoordinateValue = 800;
+        double maxCoordinateValue = 1000;
         double maxEdgeLength = 100;
 
         Graph graph = new Graph();
@@ -255,21 +255,18 @@ public class data extends Application {
 
         // 创建 Canvas 绘制图形
        // Group root = new Group();
-        Canvas canvas = new Canvas(maxCoordinateValue, maxCoordinateValue);
+        Canvas canvas = new Canvas(1800, 1000);
        // root.getChildren().add(canvas);
 
         GraphicsContext gc = canvas.getGraphicsContext2D();
 
         gc.setLineWidth(2);
-       
+
         //如果 graph.getVertices() 为空或 size() < 2，这会导致 IndexOutOfBoundsException，但也可能在某些情况下变成 NullPointerException。
         if (graph.getVertices().size() < 2) {
             System.err.println("Error: Not enough vertices in the graph.");
             return;
         }
-        // 最短路径
-        Vertex source = graph.getVertices().get(0);
-        Vertex destination = graph.getVertices().get(1);
         //工具栏
 
         //find 100 nearest vertex
@@ -278,9 +275,14 @@ public class data extends Application {
         //TextField yInput = new TextField();
         TextField pointInput = new TextField();
 
+        Vertex source = graph.getVertices().get(0);
+        Vertex destination = graph.getVertices().get(1);
+
         Button searchButton = new Button("查找最近100个顶点");
         //toolBar.getItems().addAll(new Label("X:"), xInput, new Label("Y:"), yInput, searchButton);
         toolBar.getItems().addAll(new Label("pointID:"), pointInput,  searchButton);
+
+
         //处理逻辑
 
         // TODO: 2025/3/20 输入点数据时才会调用drawmap展示最近100个顶点高亮，在进行其他操作如放大缩小等再次调用drawmap函数时才会展示高亮，因此高亮只会存在一瞬间，进行其他操作之后才会继续产生高亮
@@ -380,6 +382,7 @@ public class data extends Application {
             scaleFactor += (event.getDeltaY() > 0) ? SCALE_SPEED : -SCALE_SPEED;
             scaleFactor = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scaleFactor));
 
+
             gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
             drawMap(gc, graph,source,destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
@@ -390,7 +393,7 @@ public class data extends Application {
         VBox root = new VBox(toolBar, canvas);
 
         // 创建并显示场景
-        Scene scene = new Scene(root, maxCoordinateValue, maxCoordinateValue);
+        Scene scene = new Scene(root,1800,1000);
         primaryStage.setTitle("Graph Visualization");
         primaryStage.setScene(scene);
         primaryStage.show();
@@ -404,7 +407,7 @@ public class data extends Application {
     }
 
     private void drawMap(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
-   
+
         //初始化点和边
         graph.getEdges().forEach(edge -> {
             Color edgeColor = getEdgeColor(edge);
@@ -512,7 +515,7 @@ public class data extends Application {
 
                 // TODO: 2025/3/20  地图缩放功能只展示重要点的功能。method：可能需要在每个区域set一个特殊点。可能生成连通图的方式需要优化。
 
-                // TODO: 2025/3/21  随着缩放图片或者放大窗口，地图能随着自定义布局。 
+                // TODO: 2025/3/21  随着缩放图片或者放大窗口，地图能随着自定义布局。
 
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
