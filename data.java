@@ -229,6 +229,8 @@ public class data extends Application {
     AtomicInteger judgeshortest = new AtomicInteger(1);
 
     private List<Vertex> shortestPath = new ArrayList<>();
+   AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
+    AtomicReference<List<Edge>> relatedEdges =new AtomicReference<>(new ArrayList<>());
 
     @Override
     public void start(Stage primaryStage) {
@@ -275,14 +277,14 @@ public class data extends Application {
         //TextField xInput = new TextField();
         //TextField yInput = new TextField();
         TextField pointInput = new TextField();
+
         Button searchButton = new Button("查找最近100个顶点");
         //toolBar.getItems().addAll(new Label("X:"), xInput, new Label("Y:"), yInput, searchButton);
         toolBar.getItems().addAll(new Label("pointID:"), pointInput,  searchButton);
         //处理逻辑
-        AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
-        AtomicReference<List<Edge>> relatedEdges =new AtomicReference<>(new ArrayList<>());
+
         // TODO: 2025/3/20 输入点数据时才会调用drawmap展示最近100个顶点高亮，在进行其他操作如放大缩小等再次调用drawmap函数时才会展示高亮，因此高亮只会存在一瞬间，进行其他操作之后才会继续产生高亮
-        // TODO: 2025/3/20 点的具体x y值不好找，需要给Vertex类生成id属性，然后展示最近100个顶点高亮的函数使用id进行访问
+        // TODO: 2025/3/22 打算修改成需要产生最短路径和100个顶点高亮时生成那一时刻的静态页面并new一个新的GUI  因为动态车流显示需要时刻绘画边长颜色，如果想要最短路径和顶点高亮一直存在不现实。
         searchButton.setOnAction(e -> {
             try {
                 //double x = Double.parseDouble(xInput.getText());
@@ -296,14 +298,14 @@ public class data extends Application {
                  relatedEdges.set(graph.getRelatedEdges(nearestVertices.get()));
 
                 // 重新绘制地图
-                gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-                drawMap(gc, graph, source, destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+                //gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+                //drawMap(gc, graph, source, destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+                redraw(gc, graph, source, destination, judgeshortest, nearestVertices.get(), relatedEdges.get());
+
             } catch (NumberFormatException ex) {
                 System.out.println("请输入有效的数字");
             }
         });
-
-
 
         //放大缩小
         Button zoomInButton = new Button("放大");
@@ -350,7 +352,7 @@ public class data extends Application {
         // 更新车流模拟
         simulateTraffic(gc, graph,source,destination, judgeshortest,nearestVertices.get(), relatedEdges.get());
 
-        // 鼠标拖动事件
+        // 鼠标事件
         canvas.setOnMousePressed(event -> {
             mousePressedX = event.getSceneX();
             mousePressedY = event.getSceneY();
@@ -397,9 +399,9 @@ public class data extends Application {
     private void redraw(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
         gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
         drawMap(gc, graph,source,destination,judgeshortest, highlightVertices, highlightEdges);
+       // System.out.println(highlightEdges);
 
     }
-
 
     private void drawMap(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
    
@@ -422,6 +424,34 @@ public class data extends Application {
                     10, 10
             );
         });
+
+        if(judgeshortest.get() == 1){
+            displayShortestPath(gc, graph, source, destination);
+            //System.out.println(judgeshortest.get());
+        }
+        // 高亮最近的100个顶点
+       /* gc.setFill(Color.BLUE);
+        highlightVertices.forEach(vertex -> {
+            gc.fillOval(
+                    (vertex.x + translateX) * scaleFactor - 5,
+                    (vertex.y + translateY) * scaleFactor - 5,
+                    10, 10
+            );
+        });
+
+        // 高亮相关的边
+        gc.setStroke(Color.ORANGE);
+        highlightEdges.forEach(edge -> {
+            gc.strokeLine(
+                    (edge.start.x + translateX) * scaleFactor, (edge.start.y + translateY) * scaleFactor,
+                    (edge.end.x + translateX) * scaleFactor, (edge.end.y + translateY) * scaleFactor
+            );
+        });*/
+
+        displayNearVertex(gc,graph,source,destination,highlightVertices,highlightEdges);
+    }
+    //展示最近一百个点
+    private void displayNearVertex(GraphicsContext gc, Graph graph, Vertex source, Vertex destination,List<Vertex> highlightVertices, List<Edge> highlightEdges){
         // 高亮最近的100个顶点
         gc.setFill(Color.BLUE);
         highlightVertices.forEach(vertex -> {
@@ -440,11 +470,7 @@ public class data extends Application {
                     (edge.end.x + translateX) * scaleFactor, (edge.end.y + translateY) * scaleFactor
             );
         });
-
-        if(judgeshortest.get() == 1){
-        displayShortestPath(gc, graph, source, destination);
-        //System.out.println(judgeshortest.get());
-        }
+       // System.out.println(highlightEdges);
     }
 
     private Color getEdgeColor(Edge edge) {
