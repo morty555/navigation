@@ -26,6 +26,15 @@ class Vertex {
         this.y = y;
         this.edges = new ArrayList<>();
     }
+    // 从顶点列表中随机选择一个顶点并返回。
+    public static Vertex getRandomVertex(List<Vertex> vertices) {
+        if (vertices == null || vertices.isEmpty()) {
+            throw new IllegalArgumentException("Vertex list cannot be null or empty");
+        }
+        Random random = new Random();
+        int index = random.nextInt(vertices.size()); // 生成一个介于[0, vertices.size())的随机索引
+        return vertices.get(index); // 返回随机索引对应的顶点
+    }
 
     public double distanceTo(Vertex other) {
         return Math.sqrt(Math.pow(this.x - other.x, 2) + Math.pow(this.y - other.y, 2));
@@ -33,6 +42,7 @@ class Vertex {
 }
 
 class Edge {
+
     Vertex start, end;
     double length;
     double v; // 车容量
@@ -44,6 +54,11 @@ class Edge {
         this.length = start.distanceTo(end);
         this.v = v;
         this.n = 0; // 初始时道路上的车辆数为0
+    }
+
+    // 判断边是否连接给定的两个顶点
+    public boolean connects(Vertex v1, Vertex v2) {
+        return (start == v1 && end == v2) || (start == v2 && end == v1);
     }
 
     // 计算路段的通行时间，使用给定的公式
@@ -94,7 +109,6 @@ class Graph {
                 .collect(Collectors.toList());
     }
 
-
     public void generateConnectedGraph(double maxEdgeLength) {
         List<Edge> allEdges = new ArrayList<>();
         for (int i = 0; i < vertices.size(); i++) {
@@ -125,6 +139,19 @@ class Graph {
             edge.start.edges.add(edge);
             edge.end.edges.add(edge);
         });
+    }
+
+    // 函数：根据两个顶点返回对应的边
+    public Edge findEdge(Vertex v1, Vertex v2) {
+        // 遍历第一个顶点的边集合
+        for (Edge edge : v1.edges) {
+            // 如果边连接了这两个顶点，则返回这个边
+            if (edge.connects(v1, v2)) {
+                return edge;
+            }
+        }
+        // 如果没有找到对应的边，则返回空
+        return null;
     }
 
     public List<Vertex> getVertices() {
@@ -181,6 +208,59 @@ class Graph {
     }
 }
 
+class Car {
+    private Vertex currentVertex; // 当前所在点
+    private Vertex destinationVertex; // 前往点
+    private double travelTime; // 到达下一个地点耗时t
+    private double timer; // 计时器c
+    private List<Vertex> path; // 车辆的路径
+
+    public Car(Vertex currentVertex,Graph graph) {
+        this.currentVertex = currentVertex;
+        this.destinationVertex = null;
+        this.travelTime = 0;
+        this.timer = 0;
+        this.path = new ArrayList<>();
+        setRandomDestination(currentVertex,graph);
+    }
+
+
+    // 更新车辆状态，包括计时器和路径
+    public void update(double deltaTime, TrafficSimulation simulation)
+    {
+        Graph graph=simulation.getGraph();
+        timer -= deltaTime;
+        if (timer <= 0) {
+            if (!path.isEmpty()) {
+                Vertex lastVertex=currentVertex;
+                currentVertex = path.remove(0);
+                Vertex nextVertex=path.get(0);
+                if (path.isEmpty()) {
+                    setRandomDestination(currentVertex,graph);
+                }
+                Edge lastEdge=graph.findEdge(lastVertex,currentVertex);
+                Edge currentEdge=graph.findEdge(currentVertex,nextVertex);
+                // TODO: 2025/4/6 这里更新了每条边当前的车流量和通行时间 ,需要将此更新到edge
+                lastEdge.updateTraffic(-1);
+                currentEdge.updateTraffic(+1);
+                travelTime = currentEdge.getTrafficTime();
+                timer = travelTime;
+            }
+            else {
+                this.setRandomDestination(currentVertex,graph);}
+        }
+    }
+
+    // 设置随机目的地，并计算路径
+    public void setRandomDestination(Vertex currentVertex,Graph graph) {
+        List<Vertex> possibledes=graph.getVertices();
+        destinationVertex = Vertex.getRandomVertex(possibledes);
+        path = graph.calculateShortestPath(currentVertex, destinationVertex);
+    }
+
+
+}
+
 class UnionFind {
     int[] parent;
     int[] rank;
@@ -216,6 +296,61 @@ class UnionFind {
     }
 }
 
+class TrafficSimulation {
+    private List<Car> cars; // 模拟中的车辆列表
+    private Graph graph; // 路网图
+    private double simulationTime; // 模拟的总时间（以分钟为单位）
+    private double currentTime; // 当前模拟时间（以分钟为单位）
+    private double timeStep; // 模拟时间步长（以分钟为单位）
+
+    public TrafficSimulation(Graph graph, double simulationTime, double timeStep) {
+        this.graph = graph;
+        this.simulationTime = simulationTime;
+        this.timeStep = timeStep;
+        this.currentTime = 0;
+        this.cars = new ArrayList<>();
+        initializeCars();
+    }
+
+    private void initializeCars() {
+        // 初始化车辆，为每辆车设置起始点和目的地
+        Random rand = new Random();
+        for (int i = 0; i < 2000; i++) { // 假设我们初始化2000辆车
+            List<Vertex> possiblever=graph.getVertices();
+            Vertex start = Vertex.getRandomVertex(possiblever);
+            cars.add(new Car(start, graph));
+        }
+    }
+
+    public void startSimulation() {
+        while (currentTime < simulationTime) {
+            updateSimulation();
+            currentTime += timeStep;
+            // 模拟休眠一段时间来模拟现实时间流逝，休眠时间取决于时间步长和模拟速度
+            try {
+                Thread.sleep((long) (timeStep * 1000)); // 假设模拟速度是1分钟对应1秒
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public   Graph getGraph()
+    {
+        return  graph;
+    }
+
+    private void updateSimulation() {
+        // 更新所有车辆的状态
+        for (Car car : cars) {
+            car.update(timeStep, this);
+        }
+
+    }
+
+}
+
+
 public class data extends Application {
 
     private double scaleFactor = 1.0;
@@ -229,7 +364,7 @@ public class data extends Application {
     AtomicInteger judgeshortest = new AtomicInteger(1);
 
     private List<Vertex> shortestPath = new ArrayList<>();
-   AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
+    AtomicReference<List<Vertex>> nearestVertices = new AtomicReference<>(new ArrayList<>());;
     AtomicReference<List<Edge>> relatedEdges =new AtomicReference<>(new ArrayList<>());
 
     @Override
@@ -254,9 +389,9 @@ public class data extends Application {
 
 
         // 创建 Canvas 绘制图形
-       // Group root = new Group();
+        // Group root = new Group();
         Canvas canvas = new Canvas(1800, 1000);
-       // root.getChildren().add(canvas);
+        // root.getChildren().add(canvas);
 
         GraphicsContext gc = canvas.getGraphicsContext2D();
 
@@ -297,7 +432,7 @@ public class data extends Application {
 
                 // 查找最近100个顶点
                 nearestVertices.set(graph.findNearestVertices(vertexMap,id ,100));
-                 relatedEdges.set(graph.getRelatedEdges(nearestVertices.get()));
+                relatedEdges.set(graph.getRelatedEdges(nearestVertices.get()));
 
                 // 重新绘制地图
                 //gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
@@ -402,7 +537,7 @@ public class data extends Application {
     private void redraw(GraphicsContext gc, Graph graph,Vertex source,Vertex destination,AtomicInteger judgeshortest,List<Vertex> highlightVertices, List<Edge> highlightEdges) {
         gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
         drawMap(gc, graph,source,destination,judgeshortest, highlightVertices, highlightEdges);
-       // System.out.println(highlightEdges);
+        // System.out.println(highlightEdges);
 
     }
 
@@ -473,7 +608,7 @@ public class data extends Application {
                     (edge.end.x + translateX) * scaleFactor, (edge.end.y + translateY) * scaleFactor
             );
         });
-       // System.out.println(highlightEdges);
+        // System.out.println(highlightEdges);
     }
 
     private Color getEdgeColor(Edge edge) {
@@ -501,22 +636,15 @@ public class data extends Application {
                     e.printStackTrace();
                 }
 
+                // TODO: 2025/3/20 车流量现在还是通过随机数judge生成，将judge与car类和trafficsimulation类关联
+                // TODO: 2025/4/6 这里是车流量显示的根本，根据车流量大小修改了edge的color，是否可以将car和trafficsimulation在此使用
                 // 随机增加或减少一些车辆
                 graph.getEdges().forEach(edge -> {
                     edge.updateTraffic(rand.nextInt(10) * judge*10);
 
                 });
-
-                // TODO: 2025/3/20 车流量现在还是通过随机数judge生成，后面需要改成题目要求函数
-                    System.out.println(judge);
-
-                // TODO: 2025/3/20  展示最优路径，要结合车流量和最短路径综合考虑
-
-
-                // TODO: 2025/3/20  地图缩放功能只展示重要点的功能。method：可能需要在每个区域set一个特殊点。可能生成连通图的方式需要优化。
-
-                // TODO: 2025/3/21  随着缩放图片或者放大窗口，地图能随着自定义布局。
-
+                
+                System.out.println(judge);
                 // 更新并绘制地图
                 gc.clearRect(0, 0, gc.getCanvas().getWidth(), gc.getCanvas().getHeight());
                 drawMap(gc, graph,source,destination,judgeshortest, highlightVertices, highlightEdges);
@@ -524,6 +652,12 @@ public class data extends Application {
         }).start();
     }
 
+    // TODO: 2025/3/20  展示最优路径，要结合车流量和最短路径综合考虑
+
+
+    // TODO: 2025/3/20  地图缩放功能只展示重要点的功能。method：可能需要在每个区域set一个特殊点。可能生成连通图的方式需要优化。
+
+    // TODO: 2025/3/21  随着缩放图片或者放大窗口，地图能随着自定义布局。
 
     // 计算并显示最短路径
     static int outputtimes = 1;
@@ -546,10 +680,6 @@ public class data extends Application {
     }
 
 
-
-    public static void main(String[] args) {
-        launch(args);
-    }
 }
 
 
